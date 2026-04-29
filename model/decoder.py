@@ -36,7 +36,8 @@ class Decoder(nn.Module):
         self.device = device
         self.linear = nn.Linear(d_model, vocab_size)
 
-    def forward(self, x, encoder_output, self_mask, cross_mask):
+    def forward(self, x, encoder_output, self_mask,
+                cross_mask,self_caches=None, cross_caches=None,start_pos=0):
         """
         Decoder前向传播
 
@@ -52,11 +53,14 @@ class Decoder(nn.Module):
         # 词嵌入
         x = self.embedding(x)
         # 添加位置编码
-        x = self.positional_encoding(x)
+        x = self.positional_encoding(x,start_pos=start_pos)
 
         # 通过Decoder Block
-        for layer in self.layers:
-            x = layer(x, encoder_output, self_mask, cross_mask)
+        for i,layer in enumerate(self.layers):
+            x = layer(x, encoder_output, self_mask, cross_mask,
+            self_cache = self_caches[i] if self_caches else None,
+            cross_cache = cross_caches[i] if cross_caches else None
+            )
 
         # 最后一个LayerNorm
         x = self.norm(x)

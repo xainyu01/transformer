@@ -27,7 +27,8 @@ class DecoderBlock(nn.Module):
         self.ff = FeedForward(d_model, d_ff, dropout)
         self.dropout = nn.Dropout(dropout)
     
-    def forward(self, x, encoder_output, self_mask, cross_mask):
+    def forward(self, x, encoder_output, self_mask,
+                cross_mask,self_cache=None,cross_cache=None):
         """
         Decoder Block前向传播
 
@@ -41,12 +42,12 @@ class DecoderBlock(nn.Module):
             输出张量，形状为 [batch_size, seq_len, d_model]
         """
         # 自注意力
-        self_attn_output, _ = self.self_attn(x, x, x, self_mask)
+        self_attn_output, _ = self.self_attn(x, x, x, self_mask,kv_cache=self_cache)
         x = x + self.dropout(self_attn_output)
         x = self.norm1(x)
         
         # 交叉注意力
-        cross_attn_output, _ = self.cross_attn(x, encoder_output, encoder_output, cross_mask)
+        cross_attn_output, _ = self.cross_attn(x, encoder_output, encoder_output, cross_mask,kv_cache=cross_cache)
         x = x + self.dropout(cross_attn_output)
         x = self.norm2(x)
         

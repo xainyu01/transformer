@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn 
 import numpy as np
+from sympy.codegen.ast import Return
 
 
 class MultiHeadAttention(nn.Module):
@@ -44,7 +45,7 @@ class MultiHeadAttention(nn.Module):
         batch_size, seq_len, d_model = x.shape
         return x.view(batch_size, seq_len, self.n_heads, self.d_k).transpose(1, 2)
     
-    def forward(self, query, key, value, mask=None):
+    def forward(self, query, key, value, mask=None,kv_cache=None):
         """
         多头注意力计算
         
@@ -60,15 +61,19 @@ class MultiHeadAttention(nn.Module):
             注意力权重，形状为[batch_size, n_heads, seq_len, seq_len]
         """
         # 线性投影
-        query = self.w_q(query)
-        key = self.w_k(key)
-        value = self.w_v(value)
-        
-        # 多头分割
-        query = self.split_heads(query)  # [batch_size, n_heads, seq_len, d_k]
-        key = self.split_heads(key)
-        value = self.split_heads(value)
-        
+        query = self.split_heads(self.w_q(query))
+        if kv_cache is not None and not kv_cache.is_frozen:
+            key = self.split_heads(self.w_k(key))
+            value = self.split_heads(self.w_v(value))
+            kv_cache.update(key, value)
+            key, value = kv_cache.get()
+        elif kv_cache is not None and kv_cache.is_frozen:
+            key, value = kv_cache.get()
+        else:
+            key = self.split_heads(self.w_k(key))
+            value = self.split_heads(self.w_v(value))
+
+
         # 计算注意力分数
         # scores: [batch_size, n_heads, seq_len_q, seq_len_k]
         scores = torch.matmul(query, key.transpose(-2, -1)) / np.sqrt(self.d_k)
@@ -106,8 +111,17 @@ class MultiHeadAttention(nn.Module):
         attention_output = self.w_o(attention_output)
         
         return attention_output, attention_weights
-    
-   
+
+    def W_k(self,x)->torch.Tensor:
+        return self.w_k(x)
+
+    def W_v(self, x: torch.Tensor) -> torch.Tensor:
+        return self.w_v(x)
+
+    def loadCrossCache(self,crossCacheS=None):
+        return
+
+
     
         
 

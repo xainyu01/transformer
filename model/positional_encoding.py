@@ -4,44 +4,39 @@ import numpy as np
 
 class PositionalEncoding(nn.Module):
     """
-    位置编码模块，用于为输入添加位置信息
-
-    该模块使用正弦和余弦函数生成位置编码，解决Transformer无法处理序列顺序的问题。
-
-    Args:
-        d_model: 特征维度
-        max_seq_len: 最大序列长度，默认5000
-        device: 设备（'cpu'或'cuda'）
+    位置编码模块，支持批量输入和单步查询。
     """
     def __init__(self, d_model, max_seq_len=5000, device='cpu'):
         super().__init__()
         self.d_model = d_model
         self.max_seq_len = max_seq_len
         self.device = device
-        
+
         # 创建位置编码矩阵
         position = torch.arange(max_seq_len).unsqueeze(1)
         div_term = torch.exp(torch.arange(0, d_model, 2) * (-np.log(10000.0) / d_model))
         pe = torch.zeros(max_seq_len, d_model)
-        
         pe[:, 0::2] = torch.sin(position * div_term)
         pe[:, 1::2] = torch.cos(position * div_term)
-        
-        # 添加batch维度
-        self.pe = pe.unsqueeze(0).to(device)
-        
-    def forward(self, x):
-        """
-        将位置编码添加到输入中
+        # 添加 batch 维度 → (1, max_seq_len, d_model)
+        self.register_buffer('pe', pe.unsqueeze(0))
 
-        Args:
-            x: 输入张量，形状为 [batch_size, seq_len, d_model]
-        
-        Returns:
-            添加了位置编码的输入，形状为 [batch_size, seq_len, d_model]
+    def forward(self, x, start_pos=0):
         """
-        # 位置编码的形状为 [1, max_seq_len, d_model]
-        # 输入x的形状为 [batch_size, seq_len, d_model]
-        # 我们只需要前seq_len个位置编码
-        x = x + self.pe[:, :x.size(1), :]
-        return x
+        训练时：x 形状 (batch, seq_len, d_model)，将对应位置编码相加
+        start_pos: 当 seq_len > 1 时，起始位置索引（用于部分序列的场景）
+                   通常训练时不传，默认为 0。
+        """
+        # 取出需要的切片：(1, seq_len, d_model)
+        seq_len = x.size(1)
+        pos_enc = self.pe[:, start_pos:start_pos+seq_len, :].to(x.device)
+        return x + pos_enc
+
+    def get_position(self, pos, device=None):
+        """
+        返回单个位置的编码 (1, 1, d_model)
+        pos: 整数，位置索引
+        """
+        if device is None:
+            device = self.pe.device
+        return self.pe[:, pos:pos+1, :].to(device)
